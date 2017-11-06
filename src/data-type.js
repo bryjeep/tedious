@@ -1546,7 +1546,68 @@ const TYPE = module.exports.TYPE = {
   0xF0: {
     type: 'UDTTYPE',
     name: 'UDT',
-    hasUDTInfo: true
+    hasUDTInfo: true,
+    dataLengthLength: 2,
+
+    declaration: function(parameter) {
+      return parameter.value.schema + '.' + parameter.value.type;
+    },
+
+    resolveLength: function(parameter) {
+      if (parameter.length != null) {
+        return parameter.length;
+      } else if (parameter.value.value != null) {
+        if (Buffer.isBuffer(parameter.value.value)) {
+          return parameter.value.value.length || 1;
+        } else {
+          return parameter.value.value.toString().length || 1;
+        }
+      } else {
+        return new TypeError('Invalid buffer.');
+      }
+    },
+
+    writeTypeInfo: function(buffer, parameter, options) {
+      buffer.writeUInt8(this.id);
+      buffer.writeBVarchar(parameter.value.database != null ? parameter.value.database : '');
+      buffer.writeBVarchar(parameter.value.schema);
+      buffer.writeBVarchar(parameter.value.type);
+
+      return buffer;
+    },
+
+    writeParameterData: function(buffer, parameter) {
+      if (parameter.value.value != null) {
+        buffer.writeUInt64LE(parameter.value.value.length);
+        buffer.writeUInt32LE(parameter.value.value.length);
+        buffer.writeBuffer(parameter.value.value);
+        buffer.writeUInt32LE(0x00000000);
+        return buffer;
+      } else {
+        buffer.writeUInt32LE(0xFFFFFFFF);
+        buffer.writeUInt32LE(0xFFFFFFFF);
+        return buffer;
+      }
+    },
+
+    validate: function(value) {
+      if (value == null) {
+        return null;
+      }
+      if (typeof value !== 'object') {
+        return new TypeError('Invalid udt.');
+      }
+      if (typeof value.schema !== 'string') {
+        return new TypeError('Invalid udt schema.');
+      }
+      if (typeof value.type !== 'string') {
+        return new TypeError('Invalid udt type.');
+      }
+      if (!Buffer.isBuffer(value.value)) {
+        return new TypeError('Invalid buffer.');
+      }
+      return value;
+    }
   },
 
   0xF3: {
